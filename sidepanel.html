@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+:root{
+  --bg:#FFFFFF;--bg2:#F7F8FA;--bg3:#F0F2F5;
+  --nv:#03C75A;--nv-l:#E8F8EF;
+  --or:#FF6F00;--or-l:#FFF4E8;
+  --red:#E53935;--red-l:#FDECEA;
+  --bl:#4A90D9;
+  --tx:#1A1A1A;--tx2:#666;--tx3:#999;--tx4:#BBB;
+  --bd:#E8E8E8;--bd2:#F0F0F0;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;
+  background:var(--bg);color:var(--tx);
+  display:flex;height:100vh;overflow:hidden;
+  width:400px;
+}
+
+/* Left icon nav */
+.nav{
+  width:52px;min-width:52px;background:var(--bg2);
+  border-right:1px solid var(--bd);
+  display:flex;flex-direction:column;align-items:center;
+  padding:16px 0;gap:4px;
+}
+.nav-item{
+  width:40px;height:40px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:.15s;position:relative;
+}
+.nav-item:hover{background:var(--bg3)}
+.nav-item.active{background:var(--nv-l)}
+.nav-item.active svg{stroke:var(--nv)}
+.nav-item svg{width:20px;height:20px;stroke:var(--tx3);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.nav-spacer{flex:1}
+.nav-dot{
+  position:absolute;top:8px;right:8px;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--nv);display:none;
+}
+.nav-item.running .nav-dot{display:block;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Main content */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* Header */
+.header{
+  padding:16px 20px 12px;
+  border-bottom:1px solid var(--bd2);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.header .logo{font-weight:900;font-size:18px;color:var(--tx);letter-spacing:-.5px}
+.header .logo em{font-style:normal;color:var(--nv)}
+.status-badge{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 12px;border-radius:8px;font-size:11px;font-weight:600;
+  background:var(--bg2);color:var(--tx3);
+}
+.status-badge.running{background:var(--nv-l);color:var(--nv)}
+.status-badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.status-badge.running .dot{animation:pulse 1.5s infinite}
+
+/* Pages */
+.page{display:none;flex-direction:column;flex:1;overflow:hidden}
+.page.active{display:flex}
+
+/* === RUN PAGE === */
+.run-controls{padding:20px;border-bottom:1px solid var(--bd2)}
+.btn-row{display:flex;gap:8px;margin-bottom:16px}
+.btn-start{
+  flex:1;padding:12px;border:none;border-radius:10px;
+  background:var(--tx);color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:.15s;font-family:inherit;
+}
+.btn-start:hover{background:#333}
+.btn-start:disabled{background:var(--bg3);color:var(--tx4);cursor:not-allowed}
+.btn-stop{
+  padding:12px 20px;border:1px solid var(--bd);border-radius:10px;
+  background:var(--bg);color:var(--tx2);font-size:14px;font-weight:600;
+  cursor:pointer;transition:.15s;font-family:inherit;
+}
+.btn-stop:hover{border-color:var(--red);color:var(--red)}
+.btn-stop:disabled{color:var(--tx4);border-color:var(--bd2);cursor:not-allowed}
+
+.toggle-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx2)}
+.toggle{
+  width:36px;height:20px;border-radius:10px;
+  background:var(--bg3);cursor:pointer;position:relative;transition:.2s;
+  border:none;padding:0;
+}
+.toggle.on{background:var(--nv)}
+.toggle::after{
+  content:'';position:absolute;top:2px;left:2px;
+  width:16px;height:16px;border-radius:50%;background:#fff;
+  transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+.toggle.on::after{left:18px}
+
+/* Stats */
+.stats{
+  display:flex;gap:1px;background:var(--bd2);
+  border-bottom:1px solid var(--bd2);
+}
+.stat{
+  flex:1;text-align:center;padding:14px 8px;background:var(--bg);
+}
+.stat .val{font-size:24px;font-weight:800;letter-spacing:-1px}
+.stat .lbl{font-size:10px;color:var(--tx3);margin-top:2px;font-weight:500}
+.stat.s-green .val{color:var(--nv)}
+.stat.s-blue .val{color:var(--bl)}
+.stat.s-red .val{color:var(--red)}
+
+/* Log area */
+.log-header{
+  padding:12px 20px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--bd2);
+}
+.log-header span{font-size:12px;font-weight:700;color:var(--tx3);letter-spacing:.5px}
+.log-toggle{
+  font-size:11px;color:var(--bl);font-weight:600;
+  cursor:pointer;border:none;background:none;font-family:inherit;
+  padding:4px 10px;border-radius:6px;
+}
+.log-toggle:hover{background:var(--bg2)}
+
+.log-box{
+  flex:1;overflow-y:auto;padding:12px 20px;
+}
+.log-box::-webkit-scrollbar{width:4px}
+.log-box::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
+
+/* Simple log */
+.log-simple .log-s{
+  padding:10px 14px;margin-bottom:8px;
+  border-radius:10px;font-size:13px;line-height:1.5;
+  display:flex;align-items:flex-start;gap:10px;
+}
+.log-s .ico{
+  width:28px;height:28px;min-width:28px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:800;color:#fff;
+}
+.log-s .content{flex:1}
+.log-s .title{font-weight:600;color:var(--tx);font-size:13px}
+.log-s .desc{font-size:12px;color:var(--tx2);margin-top:2px}
+.log-s .time{font-size:10px;color:var(--tx4);margin-top:4px}
+
+.log-s.collect{background:var(--bg2)}.log-s.collect .ico{background:var(--bl)}
+.log-s.change{background:var(--nv-l)}.log-s.change .ico{background:var(--nv)}
+.log-s.skip{background:var(--bg2)}.log-s.skip .ico{background:var(--tx4)}
+.log-s.error{background:var(--red-l)}.log-s.error .ico{background:var(--red)}
+.log-s.done{background:var(--nv-l);border:1px solid rgba(3,199,90,.2)}.log-s.done .ico{background:var(--nv)}
+
+/* Detail log */
+.log-detail{display:none}
+.log-detail.show{display:block}
+.log-simple.hide{display:none}
+.log-d{
+  padding:3px 0;font-family:'SF Mono','Fira Code',monospace;
+  font-size:11px;line-height:1.7;color:var(--tx2);
+  border-bottom:1px solid var(--bd2);
+}
+.log-d .t{color:var(--tx4);margin-right:6px}
+.log-d.g{color:var(--nv)}.log-d.o{color:var(--or)}.log-d.r{color:var(--red)}.log-d.b{color:var(--bl)}
+
+/* === SETTINGS PAGE === */
+.settings{padding:20px;overflow-y:auto;flex:1}
+.set-section{margin-bottom:28px}
+.set-section h3{
+  font-size:12px;font-weight:700;color:var(--tx3);
+  letter-spacing:.5px;margin-bottom:14px;
+  padding-bottom:8px;border-bottom:1px solid var(--bd2);
+}
+.set-group{margin-bottom:14px}
+.set-group label{display:block;font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:4px}
+.set-group input{
+  width:100%;padding:10px 14px;
+  background:var(--bg2);border:1px solid var(--bd);border-radius:10px;
+  color:var(--tx);font-size:13px;font-family:inherit;
+  transition:.15s;
+}
+.set-group input:focus{outline:none;border-color:var(--nv);background:var(--bg)}
+.set-group .hint{font-size:10px;color:var(--tx4);margin-top:3px}
+.set-row{display:flex;gap:10px}
+.set-row .set-group{flex:1}
+.btn-save{
+  width:100%;padding:12px;border:none;border-radius:10px;
+  background:var(--tx);color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;font-family:inherit;margin-top:8px;transition:.15s;
+}
+.btn-save:hover{background:#333}
+.btn-test-tg{
+  width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;
+  background:var(--bg);color:var(--bl);font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit;margin-top:8px;transition:.15s;
+}
+.btn-test-tg:hover{background:var(--bg2)}
+.save-ok{text-align:center;font-size:12px;color:var(--nv);margin-top:8px;display:none}
+
+/* === LOG PAGE (full) === */
+.log-full{padding:12px 20px;overflow-y:auto;flex:1}
+
+/* Progress bar */
+.progress{
+  height:3px;background:var(--bg3);
+}
+.progress-bar{
+  height:100%;background:var(--nv);width:0%;transition:width .3s;
+}
+</style>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+</head>
+<body>
+
+<!-- Left Nav -->
+<div class="nav">
+  <div class="nav-item active" data-page="run" title="실행">
+    <span class="nav-dot"></span>
+    <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+  </div>
+  <div class="nav-item" data-page="settings" title="설정">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+  </div>
+  <div class="nav-spacer"></div>
+  <div class="nav-item" data-page="logfull" title="전체 로그">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+  <div class="header">
+    <div class="logo">PRA<em>.</em></div>
+    <div class="status-badge" id="statusBadge">
+      <span class="dot"></span>
+      <span id="statusText">대기</span>
+    </div>
+  </div>
+  <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+
+  <!-- RUN PAGE -->
+  <div class="page active" id="page-run">
+    <div class="run-controls">
+      <div class="btn-row">
+        <button class="btn-start" id="btnStart">시작</button>
+        <button class="btn-stop" id="btnStop" disabled>중지</button>
+      </div>
+      <div class="toggle-row">
+        <button class="toggle" id="testToggle"></button>
+        <span>테스트 모드 — 가격 변경 없이 확인만</span>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat s-green"><div class="val" id="cntChange">0</div><div class="lbl">변경</div></div>
+      <div class="stat s-blue"><div class="val" id="cntSkip">0</div><div class="lbl">스킵</div></div>
+      <div class="stat s-red"><div class="val" id="cntError">0</div><div class="lbl">오류</div></div>
+    </div>
+    <div class="log-header">
+      <span>실행 로그</span>
+      <button class="log-toggle" id="logModeBtn">상세 보기</button>
+    </div>
+    <div class="log-box">
+      <div class="log-simple" id="logSimple">
+        <!-- Dynamic simple logs -->
+      </div>
+      <div class="log-detail" id="logDetail">
+        <!-- Dynamic detail logs -->
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PAGE -->
+  <div class="page" id="page-settings">
+    <div class="settings">
+      <div class="set-section">
+        <h3>Commerce API</h3>
+        <div class="set-group">
+          <label>애플리케이션 ID</label>
+          <input type="text" id="cfgId" placeholder="예: 1m94CFAyTnNPEB9CVpUbw8">
+        </div>
+        <div class="set-group">
+          <label>애플리케이션 시크릿</label>
+          <input type="password" id="cfgSecret" placeholder="$2a$04$...">
+        </div>
+      </div>
+      <div class="set-section">
+        <h3>스토어</h3>
+        <div class="set-group">
+          <label>내 스토어명</label>
+          <input type="text" id="cfgStore" placeholder="예: 볼빨간오빠, Pkstroy">
+          <div class="hint">가격비교에서 경쟁사 제외 용도. 쉼표로 구분.</div>
+        </div>
+      </div>
+      <div class="set-section">
+        <h3>가격</h3>
+        <div class="set-row">
+          <div class="set-group">
+            <label>언더컷 (원)</label>
+            <input type="number" id="cfgUnder" value="10">
+          </div>
+          <div class="set-group">
+            <label>최소 마진 (%)</label>
+            <input type="number" id="cfgMargin" value="20">
+          </div>
+        </div>
+      </div>
+      <div class="set-section">
+        <h3>텔레그램 알림</h3>
+        <div class="set-group">
+          <label>봇 토큰</label>
+          <input type="text" id="cfgTgToken" placeholder="123456:ABCdef...">
+        </div>
+        <div class="set-group">
+          <label>Chat ID</label>
+          <input type="text" id="cfgTgChat" placeholder="예: 123456789">
+        </div>
+        <button class="btn-test-tg">테스트 발송</button>
+      </div>
+      <button class="btn-save" id="btnSave">저장</button>
+      <div class="save-ok" id="saveOk">저장되었습니다.</div>
+    </div>
+  </div>
+
+  <!-- FULL LOG PAGE -->
+  <div class="page" id="page-logfull">
+    <div class="log-header">
+      <span>전체 실행 로그</span>
+    </div>
+    <div class="log-full" id="logFull">
+      <!-- Dynamic full logs -->
+    </div>
+  </div>
+</div>
+
+<script src="sidepanel.js"></script>
+
+</body>
+</html>

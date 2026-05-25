@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "PRA — 가격 자동화",
+  "version": "2.0.0",
+  "description": "네이버 스마트스토어 카탈로그 최저가 자동 매칭",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://sell.smartstore.naver.com/*",
+    "https://search.shopping.naver.com/*",
+    "https://api.commerce.naver.com/*",
+    "https://api.telegram.org/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {},
+  "content_scripts": [
+    {
+      "matches": ["https://sell.smartstore.naver.com/*"],
+      "js": ["content_catalog.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://search.shopping.naver.com/catalog/*"],
+      "js": ["content_price.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
