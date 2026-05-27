@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(node --check background.js)",
-      "Bash(node --check sidepanel.js)"
+      "Bash(node --check sidepanel.js)",
+      "Bash(git worktree *)",
+      "Read(//Users/yonseimed/projects/**)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('manifest.json','utf8'\\)\\); console.log\\('manifest.json OK'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh repo *)",
+      "Bash(gh pr create --base feature/v2-algorithm --head feature/claim-automation --title 'feat: 클레임 자동처리 탭' --body ' *)"
     ]
   }
 }

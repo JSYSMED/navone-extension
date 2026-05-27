@@ -38,7 +38,7 @@ async function syncAutomationAlarms() {
 async function runAutomationTask(path, title) {
   try {
     const cfg = (await storageGet("config")) || {};
-    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server-production.up.railway.app").replace(/\/+$/, "");
     log("\n⚙️ " + title + " 요청");
     const res = await fetch(vercelUrl + path, {
       method: "POST",
@@ -304,7 +304,7 @@ async function generateReviewReply(review, tone) {
     if (!review || !review.content) return { success: false, error: "리뷰 내용 없음" };
 
     const cfg = (await storageGet("config")) || {};
-    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server-production.up.railway.app").replace(/\/+$/, "");
     const storeName = (cfg.storeNames && cfg.storeNames[0]) || "스토어";
 
     const body = {
@@ -441,7 +441,7 @@ async function getClaimPending() {
   try {
     const cfg = (await storageGet("config")) || {};
     if (!cfg.licenseKey) return { success: false, error: "라이선스 키를 먼저 설정해주세요." };
-    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server-production.up.railway.app").replace(/\/+$/, "");
 
     const res = await fetch(vercelUrl + "/api/claim/pending?licenseKey=" + encodeURIComponent(cfg.licenseKey));
     if (!res.ok) {
@@ -468,7 +468,7 @@ async function autoProcessClaims() {
   try {
     const cfg = (await storageGet("config")) || {};
     if (!cfg.licenseKey) return { success: false, error: "라이선스 키를 먼저 설정해주세요." };
-    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server-production.up.railway.app").replace(/\/+$/, "");
 
     log("\n🤖 클레임 자동처리 시작");
     const res = await fetch(vercelUrl + "/api/claim/auto-process", {
@@ -503,7 +503,7 @@ async function manualDecideClaim(productOrderId, decision) {
 
     const cfg = (await storageGet("config")) || {};
     if (!cfg.licenseKey) return { success: false, error: "라이선스 키를 먼저 설정해주세요." };
-    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server-production.up.railway.app").replace(/\/+$/, "");
 
     const res = await fetch(vercelUrl + "/api/claim/manual-decide", {
       method: "POST",
@@ -587,7 +587,7 @@ async function pushHistory(type, data) {
     const cfg = (await storageGet("config")) || {};
     const licenseKey = cfg.licenseKey || "";
     if (!licenseKey) return;  // 라이선스 없으면 서버 적재 스킵 (로컬 저장은 그대로)
-    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server-production.up.railway.app").replace(/\/+$/, "");
     await fetch(vercelUrl + "/api/history-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

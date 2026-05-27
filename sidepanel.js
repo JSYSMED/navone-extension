@@ -607,7 +607,7 @@ var DELIVERY_COMPANIES = [
 function withOrderApi(cb) {
   chrome.storage.local.get('config', (data) => {
     var c = data.config || {};
-    var base = (c.vercelUrl || 'https://navone-server.vercel.app').replace(/\/+$/, '');
+    var base = (c.vercelUrl || 'https://navone-server-production.up.railway.app').replace(/\/+$/, '');
     cb(base, c.licenseKey || '');
   });
 }
