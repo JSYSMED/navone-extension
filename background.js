@@ -195,6 +195,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     submitReply(msg.tabId, msg.rowIndex, msg.replyText, msg.review).then(sendResponse);
     return true;  // 비동기 응답
   }
+  // === 고객문의(CS) — 커머스 API 기반 ===
+  else if (msg.action === "SCAN_INQUIRIES") {
+    scanInquiries().then(sendResponse);
+    return true;  // 비동기 응답
+  }
+  else if (msg.action === "GENERATE_INQUIRY_ANSWER") {
+    generateInquiryAnswer(msg.inquiry, msg.tone).then(sendResponse);
+    return true;  // 비동기 응답
+  }
+  else if (msg.action === "SUBMIT_INQUIRY_ANSWER") {
+    submitInquiryAnswer(msg.inquiry, msg.replyText, msg.mode).then(sendResponse);
+    return true;  // 비동기 응답
+  }
   return true;
 });
 
@@ -434,6 +447,182 @@ async function appendReviewHistory(entry) {
   hist.push(entry);
   if (hist.length > 500) hist.splice(0, hist.length - 500);
   await storageSet({ review_history: hist });
+}
+
+// cs_history append (최대 500건, 초과 시 오래된 것 삭제)
+async function appendCsHistory(entry) {
+  const hist = (await storageGet("cs_history")) || [];
+  hist.push(entry);
+  if (hist.length > 500) hist.splice(0, hist.length - 500);
+  await storageSet({ cs_history: hist });
+}
+
+// =============================================
+// 고객문의(CS) 핸들러 — 커머스 API v1.4.0 기반 (Vercel 서버 경유)
+// 커머스 호출은 서버(/api/inquiry/*)가 수행하되, 인증 토큰은 여기서 발급해 전달한다.
+// =============================================
+
+// Commerce 토큰 확보 (config 로드 + ensureToken). 성공 시 토큰 문자열, 실패 시 null.
+async function ensureCommerceToken() {
+  await loadConfig();
+  if (!CFG.CLIENT_ID || !CFG.CLIENT_SECRET) return null;
+  const ok = await ensureToken();
+  return ok ? state.token : null;
+}
+
+function vercelBase(cfg) {
+  return (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+}
+
+// SCAN_INQUIRIES: 서버 /api/inquiry/list 호출 → 미답변 문의 목록
+async function scanInquiries() {
+  try {
+    log("\n❓ 문의 스캔 시작");
+    const token = await ensureCommerceToken();
+    if (!token) {
+      log("❌ Commerce API 키/토큰 없음");
+      slog("error", "설정 필요", "Commerce API 키를 먼저 입력해주세요.");
+      return { success: false, inquiries: [], error: "Commerce API 토큰 발급 실패" };
+    }
+
+    const cfg = (await storageGet("config")) || {};
+    const res = await fetch(vercelBase(cfg) + "/api/inquiry/list", {
+      method: "GET",
+      headers: { "x-naver-token": token },
+    });
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch (_) {}
+      log("❌ 문의 목록 조회 실패 (" + res.status + ") " + detail);
+      return { success: false, inquiries: [], error: "서버 오류 " + res.status + (detail ? " · " + detail : "") };
+    }
+
+    const data = await res.json();
+    const inquiries = data.inquiries || [];
+    if (inquiries.length === 0) {
+      log("⚠️ 미답변 문의 0건");
+      slog("skip", "문의 없음", "미답변 문의가 없습니다.");
+      return { success: false, inquiries: [] };
+    }
+
+    log("❓ 미답변 문의 " + inquiries.length + "개 수집");
+    slog("collect", "문의 스캔 완료", inquiries.length + "개 문의를 불러왔습니다.");
+    return { success: true, inquiries };
+  } catch (e) {
+    log("❌ 문의 스캔 오류: " + e.message);
+    return { success: false, inquiries: [], error: e.message };
+  }
+}
+
+// GENERATE_INQUIRY_ANSWER: 서버 /api/inquiry/ai-answer 호출 → AI 답변 초안
+async function generateInquiryAnswer(inquiry, tone) {
+  try {
+    if (!inquiry || !inquiry.content) return { success: false, error: "문의 내용 없음" };
+
+    const cfg = (await storageGet("config")) || {};
+    const storeName = (cfg.storeNames && cfg.storeNames[0]) || "스토어";
+
+    const body = {
+      inquiry: {
+        content: inquiry.content,
+        productName: inquiry.productName || "",
+        type: inquiry.category || inquiry.type || "상품문의",
+      },
+      storeContext: {
+        storeName,
+        tone: tone || cfg.csTone || cfg.reviewTone || "정중",
+        customPrompt: cfg.csCustomPrompt || "",
+      },
+      licenseKey: cfg.licenseKey || "",
+    };
+
+    const res = await fetch(vercelBase(cfg) + "/api/inquiry/ai-answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch (_) {}
+      log("❌ 문의 답변 생성 실패 (" + res.status + ") " + detail);
+      return { success: false, error: "서버 오류 " + res.status + (detail ? " · " + detail : "") };
+    }
+
+    const data = await res.json();
+    if (!data.reply) return { success: false, error: data.error || "빈 응답" };
+
+    const out = data.tokens ? data.tokens.output : 0;
+    log("✍️ 문의 답변 생성 완료 (" + out + " 토큰)");
+    return { success: true, reply: data.reply, tokens: data.tokens };
+  } catch (e) {
+    log("❌ 문의 답변 생성 오류: " + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+// SUBMIT_INQUIRY_ANSWER: 답변 등록.
+// ★ 규칙: 등록 전 반드시 로그 저장(로컬 cs_history + 서버 적재) → 그 다음 서버 등록 호출.
+async function submitInquiryAnswer(inquiry, replyText, mode) {
+  try {
+    const text = (replyText || "").trim();
+    if (!inquiry || !inquiry.inquiryId) return { success: false, error: "문의 ID 없음" };
+    if (text.length < 5) return { success: false, error: "답변은 최소 5자 이상" };
+
+    log("\n📝 문의 답변 등록 시작 (id " + inquiry.inquiryId + ")");
+
+    const token = await ensureCommerceToken();
+    if (!token) return { success: false, error: "Commerce API 토큰 발급 실패" };
+
+    const cfg = (await storageGet("config")) || {};
+    const finalMode = mode || (cfg.csAutoMode ? "auto" : "manual");
+
+    // 1) 등록 전 로그 저장 (규칙)
+    const histEntry = {
+      inquiryId: inquiry.inquiryId,
+      productName: inquiry.productName || "",
+      inquiryContent: inquiry.content || "",
+      generatedReply: inquiry.generatedReply || text,
+      finalReply: text,
+      timestamp: new Date().toISOString(),
+      mode: finalMode,
+    };
+    await appendCsHistory(histEntry);
+    pushHistory("cs", {
+      product_name: inquiry.productName || "",
+      inquiry_content: inquiry.content || "",
+      generated_reply: inquiry.generatedReply || text,
+      final_reply: text,
+      mode: finalMode,
+    });
+
+    // 2) 서버 경유 커머스 등록
+    const res = await fetch(vercelBase(cfg) + "/api/inquiry/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-naver-token": token },
+      body: JSON.stringify({
+        inquiryId: inquiry.inquiryId,
+        content: text,
+        licenseKey: cfg.licenseKey || "",
+        mode: finalMode,
+        inquiry: { productName: inquiry.productName || "", content: inquiry.content || "" },
+      }),
+    });
+
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch (_) {}
+      log("❌ 문의 답변 등록 실패 (" + res.status + ") " + detail);
+      return { success: false, error: "서버 오류 " + res.status + (detail ? " · " + detail : "") };
+    }
+
+    log("✅ 문의 답변 등록 완료");
+    slog("change", "문의 답변 등록", inquiry.productName || ("id " + inquiry.inquiryId));
+    return { success: true };
+  } catch (e) {
+    log("❌ 문의 답변 등록 오류: " + e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // =============================================

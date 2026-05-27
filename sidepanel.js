@@ -445,3 +445,225 @@ function buildReviewCard(r) {
 
   return card;
 }
+
+// =====================================================
+// === 고객문의(CS) 탭 — 커머스 API 기반 ===
+// =====================================================
+var csTone = '정중';
+var csAuto = false;
+
+function sendMsg(msg) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(msg, (res) => {
+      if (chrome.runtime.lastError) resolve(null);
+      else resolve(res);
+    });
+  });
+}
+
+// 톤 선택
+document.getElementById('csToneSeg').addEventListener('click', (e) => {
+  var opt = e.target.closest('.tone-opt');
+  if (!opt) return;
+  document.querySelectorAll('#csToneSeg .tone-opt').forEach(o => o.classList.remove('on'));
+  opt.classList.add('on');
+  csTone = opt.getAttribute('data-tone');
+  chrome.storage.local.get('config', (data) => {
+    var c = data.config || {};
+    c.csTone = csTone;
+    chrome.storage.local.set({ config: c });
+  });
+});
+
+// 자동답변 토글
+document.getElementById('csAutoToggle').addEventListener('click', function () {
+  this.classList.toggle('on');
+  csAuto = this.classList.contains('on');
+  chrome.storage.local.get('config', (data) => {
+    var c = data.config || {};
+    c.csAutoMode = csAuto;
+    chrome.storage.local.set({ config: c });
+  });
+});
+
+// 저장된 CS 설정 불러오기
+chrome.storage.local.get('config', (data) => {
+  var c = data.config || {};
+  if (c.csTone) {
+    csTone = c.csTone;
+    document.querySelectorAll('#csToneSeg .tone-opt').forEach(o => {
+      o.classList.toggle('on', o.getAttribute('data-tone') === c.csTone);
+    });
+  }
+  if (c.csAutoMode) {
+    csAuto = true;
+    document.getElementById('csAutoToggle').classList.add('on');
+  }
+});
+
+function bumpCsStat(id) {
+  var el = document.getElementById(id);
+  el.textContent = (parseInt(el.textContent, 10) || 0) + 1;
+}
+
+// 문의 스캔
+document.getElementById('btnCsScan').addEventListener('click', async () => {
+  var btn = document.getElementById('btnCsScan');
+  btn.disabled = true;
+  btn.textContent = '스캔 중…';
+  document.getElementById('csList').innerHTML = '<div class="rv-loading">문의를 불러오는 중…</div>';
+  document.getElementById('csDone').textContent = '0';
+  document.getElementById('csSkip').textContent = '0';
+  document.getElementById('csError').textContent = '0';
+
+  const res = await sendMsg({ action: 'SCAN_INQUIRIES' });
+  btn.disabled = false;
+  btn.textContent = '문의 스캔';
+
+  if (!res || !res.success) {
+    document.getElementById('csList').innerHTML =
+      '<div class="review-empty">' + esc((res && res.error) || '미답변 문의를 가져오지 못했습니다.') + '</div>';
+    return;
+  }
+  renderInquiries(res.inquiries || []);
+});
+
+function renderInquiries(inquiries) {
+  var list = document.getElementById('csList');
+  list.innerHTML = '';
+  if (!inquiries.length) {
+    list.innerHTML = '<div class="review-empty">표시할 문의가 없습니다.</div>';
+    return;
+  }
+  var cards = inquiries.map(q => {
+    var card = buildInquiryCard(q);
+    list.appendChild(card.el);
+    return card;
+  });
+
+  // 자동답변 모드: 순차적으로 생성 + 등록
+  if (csAuto) runCsAuto(cards);
+}
+
+// 카드 순차 자동 처리 (생성 → 등록)
+async function runCsAuto(cards) {
+  for (const card of cards) {
+    try {
+      const ok = await card.autoProcess();
+      if (!ok) bumpCsStat('csError');
+    } catch (e) {
+      bumpCsStat('csError');
+    }
+    await new Promise(r => setTimeout(r, 1500)); // delay
+  }
+}
+
+function buildInquiryCard(q) {
+  var card = document.createElement('div');
+  card.className = 'rv-card';
+
+  var badges = '<span class="rv-badge">' + esc(q.category || '상품문의') + '</span>';
+  if (q.isSecret) badges += '<span class="rv-badge">비밀글</span>';
+
+  card.innerHTML =
+    '<div class="rv-top"><div class="rv-badges">' + badges + '</div></div>' +
+    '<div class="rv-name">' + esc(q.productName || '') + '</div>' +
+    '<div class="rv-content">' + esc(q.content || '') + '</div>' +
+    '<div class="rv-meta">' + esc(q.writerId || '') + ' · ' + esc(q.date || '') + '</div>' +
+    '<div class="rv-actions">' +
+      '<button class="rv-btn primary act-gen">답변 생성</button>' +
+      '<button class="rv-btn act-skip">건너뛰기</button>' +
+    '</div>' +
+    '<div class="rv-reply">' +
+      '<textarea maxlength="1000" placeholder="답변을 입력하세요."></textarea>' +
+      '<div class="cnt">0 / 1000</div>' +
+      '<div class="rv-actions">' +
+        '<button class="rv-btn primary act-submit">등록</button>' +
+        '<button class="rv-btn act-regen">재생성</button>' +
+        '<button class="rv-btn act-cancel">취소</button>' +
+      '</div>' +
+    '</div>';
+
+  var genBtn = card.querySelector('.act-gen');
+  var skipBtn = card.querySelector('.act-skip');
+  var reply = card.querySelector('.rv-reply');
+  var ta = card.querySelector('textarea');
+  var cnt = card.querySelector('.cnt');
+  var actionsRow = card.querySelector('.rv-actions');
+
+  ta.addEventListener('input', () => { cnt.textContent = ta.value.length + ' / 1000'; });
+
+  async function generate() {
+    genBtn.disabled = true;
+    genBtn.textContent = '생성 중…';
+    const res = await sendMsg({ action: 'GENERATE_INQUIRY_ANSWER', inquiry: q, tone: csTone });
+    genBtn.disabled = false;
+    genBtn.textContent = '답변 생성';
+    if (!res || !res.success) {
+      bumpCsStat('csError');
+      addSimpleLog('error', '답변 생성 실패', q.productName || '');
+      return false;
+    }
+    q.generatedReply = res.reply || '';
+    ta.value = res.reply || '';
+    cnt.textContent = ta.value.length + ' / 1000';
+    actionsRow.style.display = 'none';
+    reply.classList.add('show');
+    return true;
+  }
+
+  async function submit(text) {
+    const res = await sendMsg({
+      action: 'SUBMIT_INQUIRY_ANSWER',
+      inquiry: q,
+      replyText: text,
+      mode: csAuto ? 'auto' : 'manual',
+    });
+    if (!res || !res.success) {
+      bumpCsStat('csError');
+      addSimpleLog('error', '답변 등록 실패', (res && res.error) || q.productName || '');
+      return false;
+    }
+    card.classList.add('done');
+    reply.classList.remove('show');
+    bumpCsStat('csDone');
+    addSimpleLog('change', '문의 답변 등록', q.productName || '');
+    return true;
+  }
+
+  genBtn.addEventListener('click', generate);
+  card.querySelector('.act-regen').addEventListener('click', () => {
+    reply.classList.remove('show');
+    actionsRow.style.display = 'flex';
+    generate();
+  });
+  skipBtn.addEventListener('click', () => {
+    card.classList.add('done');
+    genBtn.disabled = true; skipBtn.disabled = true;
+    bumpCsStat('csSkip');
+  });
+  card.querySelector('.act-cancel').addEventListener('click', () => {
+    reply.classList.remove('show');
+    actionsRow.style.display = 'flex';
+  });
+  card.querySelector('.act-submit').addEventListener('click', async (e) => {
+    var submitBtn = e.target;
+    var text = ta.value.trim();
+    if (text.length < 5) { alert('답변은 최소 5자 이상이어야 합니다.'); return; }
+    submitBtn.disabled = true;
+    submitBtn.textContent = '등록 중…';
+    const ok = await submit(text);
+    if (!ok) { submitBtn.disabled = false; submitBtn.textContent = '등록'; }
+  });
+
+  // 자동 모드 처리: 생성 후 곧바로 등록
+  async function autoProcess() {
+    const gOk = await generate();
+    if (!gOk) return false;
+    const text = (ta.value || '').trim();
+    if (text.length < 5) { bumpCsStat('csError'); return false; }
+    return submit(text);
+  }
+
+  return { el: card, autoProcess };
+}
