@@ -14,7 +14,8 @@
     "https://sell.smartstore.naver.com/*",
     "https://search.shopping.naver.com/*",
     "https://api.commerce.naver.com/*",
-    "https://api.telegram.org/*"
+    "https://api.telegram.org/*",
+    "https://navone-server.vercel.app/*"
   ],
   "background": {
     "service_worker": "background.js"

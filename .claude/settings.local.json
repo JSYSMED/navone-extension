@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check background.js)",
+      "Bash(node --check sidepanel.js)"
+    ]
+  }
+}

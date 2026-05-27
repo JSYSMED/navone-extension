@@ -87,7 +87,6 @@
         sellerName: sellerName,
         price: price,
         deliveryFee: deliveryFee,
-        totalPrice: price,
       });
     });
 
@@ -98,5 +97,5 @@
     return new Promise(function(resolve) { setTimeout(resolve, ms); });
   }
 
-  console.log("[Pkstroy] content_price.js 로드됨");
+  console.log("[NavOne] content_price.js 로드됨");
 })();

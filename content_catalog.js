@@ -12,11 +12,6 @@
       clickDetailForProduct(msg.channelProductNo).then(result => sendResponse(result));
       return true;
     }
-    else if (msg.action === "FIND_AND_CLICK_DETAIL") {
-      // 현재 그리드에서 다음 "높음" 상품 찾아서 상세보기 클릭
-      findAndClickDetail(msg.processedSet || []).then(result => sendResponse(result));
-      return true;
-    }
     else if (msg.action === "CLICK_NEXT_PAGE") {
       sendResponse(clickNextPage());
     }
@@ -73,78 +68,6 @@
       products,
       totalCount: products.length,
     };
-  }
-
-  // =============================================
-  // 다음 "높음" 상품 찾아서 상세보기 클릭
-  // processedSet: 이미 처리한 상품번호 배열
-  // =============================================
-  async function findAndClickDetail(processedSet) {
-    const processed = new Set(processedSet);
-    const viewport = document.querySelector(".ag-body-viewport");
-    if (!viewport) return { found: false, error: "viewport 없음" };
-
-    const totalH = viewport.scrollHeight;
-    const viewH = viewport.clientHeight;
-    let scrollPos = 0;
-
-    while (scrollPos <= totalH + viewH) {
-      viewport.scrollTop = scrollPos;
-      await sleep(300);
-
-      // 현재 보이는 행 확인
-      const leftRows = document.querySelectorAll(".ag-pinned-left-cols-container .ag-row");
-      const centerContainer = document.querySelector(".ag-center-cols-container");
-
-      for (const leftRow of leftRows) {
-        // 상품번호 추출
-        const link = leftRow.querySelector("a");
-        if (!link) continue;
-        const productNo = link.textContent.trim();
-        if (!/^\d{8,}$/.test(productNo)) continue;
-        if (processed.has(productNo)) continue;
-
-        // 같은 row-index의 중앙 행 찾기
-        const rowIdx = leftRow.getAttribute("row-index");
-        const centerRow = centerContainer?.querySelector('.ag-row[row-index="' + rowIdx + '"]');
-        if (!centerRow) continue;
-
-        // "높음" 확인
-        const rowText = centerRow.textContent || "";
-        if (!rowText.includes("높음")) continue;
-
-        // 상품 정보 추출
-        const product = parseRowPair(leftRow, centerRow, rowIdx);
-        if (!product) continue;
-
-        // "상세보기" 버튼 클릭
-        const buttons = centerRow.querySelectorAll("button");
-        for (const btn of buttons) {
-          if (btn.textContent.trim() === "상세보기") {
-            btn.click();
-            await sleep(500);
-            return {
-              found: true,
-              clicked: true,
-              product: product,
-            };
-          }
-        }
-
-        // 버튼 못 찾음
-        return {
-          found: true,
-          clicked: false,
-          product: product,
-          error: "상세보기 버튼 없음 (row " + rowIdx + ")",
-        };
-      }
-
-      scrollPos += Math.floor(viewH * 0.7);
-    }
-
-    // 이 페이지에서 더 이상 "높음" 상품 없음
-    return { found: false, done: true };
   }
 
   // =============================================
@@ -316,5 +239,5 @@
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  console.log("[Pkstroy] content_catalog.js 로드됨");
+  console.log("[NavOne] content_catalog.js 로드됨");
 })();
