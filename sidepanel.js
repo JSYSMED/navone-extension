@@ -248,6 +248,33 @@ document.getElementById('testToggle').addEventListener('click', function() {
   this.classList.toggle('on');
 });
 
+// =====================================================
+// === 자동화 설정 탭 ===
+// =====================================================
+// 토글 → chrome.storage.local의 top-level 키. background.js가 storage 변화를 감지해
+// chrome.alarms를 재설정한다(클레임 30분 / 발주 15분).
+var AUTO_TOGGLES = [
+  { id: 'autoModeToggle',    key: 'autoMode' },          // 가격 자동화
+  { id: 'autoClaimToggle',   key: 'autoClaimProcess' },  // 클레임 자동처리
+  { id: 'autoConfirmToggle', key: 'autoConfirmOrders' }, // 발주 자동확인
+];
+
+// 저장된 상태 불러오기
+chrome.storage.local.get(AUTO_TOGGLES.map(t => t.key), (data) => {
+  AUTO_TOGGLES.forEach(t => {
+    document.getElementById(t.id).classList.toggle('on', !!data[t.key]);
+  });
+});
+
+// 클릭 → 상태 반전 + 저장
+AUTO_TOGGLES.forEach(t => {
+  document.getElementById(t.id).addEventListener('click', function () {
+    this.classList.toggle('on');
+    var on = this.classList.contains('on');
+    chrome.storage.local.set({ [t.key]: on });
+  });
+});
+
 // Load existing logs on open
 chrome.storage.local.get(['logs', 'slogs'], (data) => {
   if (data.slogs) data.slogs.slice(-20).forEach(s => addSimpleLog(s.type, s.title, s.desc));
