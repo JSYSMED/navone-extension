@@ -445,3 +445,191 @@ function buildReviewCard(r) {
 
   return card;
 }
+
+// =====================================================
+// === 주문/발주 탭 ===
+// =====================================================
+// 배송사 코드 (커머스 표준) — 서버 _lib.js DELIVERY_COMPANIES 부분집합
+var DELIVERY_COMPANIES = [
+  ['CJGLS', 'CJ대한통운'],
+  ['HANJIN', '한진'],
+  ['LOTTE', '롯데'],
+  ['EPOST', '우체국'],
+  ['LOGEN', '로젠'],
+];
+
+// config에서 서버 URL + licenseKey 로드 (background.js와 동일 규약)
+function withOrderApi(cb) {
+  chrome.storage.local.get('config', (data) => {
+    var c = data.config || {};
+    var base = (c.vercelUrl || 'https://navone-server.vercel.app').replace(/\/+$/, '');
+    cb(base, c.licenseKey || '');
+  });
+}
+
+function bumpOrderStat(id, n) {
+  var el = document.getElementById(id);
+  el.textContent = (parseInt(el.textContent, 10) || 0) + (n || 1);
+}
+
+// 서버 표준 에러({success:false, error:{message}}) → 사람이 읽을 메시지
+function orderErrMsg(data, status) {
+  return (data && data.error && data.error.message) || ('서버 오류 ' + status);
+}
+
+// 미발주 주문 불러오기
+document.getElementById('btnOrderLoad').addEventListener('click', loadPendingOrders);
+
+function loadPendingOrders() {
+  var btn = document.getElementById('btnOrderLoad');
+  var list = document.getElementById('orderList');
+  btn.disabled = true;
+  btn.textContent = '불러오는 중…';
+  list.innerHTML = '<div class="od-loading">미발주 주문을 불러오는 중…</div>';
+
+  withOrderApi(async (base, licenseKey) => {
+    if (!licenseKey) {
+      btn.disabled = false; btn.textContent = '미발주 주문 불러오기';
+      list.innerHTML = '<div class="order-empty">라이선스 키가 없습니다.<br>설정에서 먼저 등록해주세요.</div>';
+      return;
+    }
+    try {
+      var res = await fetch(base + '/api/order/pending?licenseKey=' + encodeURIComponent(licenseKey));
+      var data = await res.json();
+      btn.disabled = false; btn.textContent = '미발주 주문 불러오기';
+      if (!res.ok || !data.success) {
+        list.innerHTML = '<div class="order-empty">' + esc(orderErrMsg(data, res.status)) + '</div>';
+        return;
+      }
+      var orders = (data.data && data.data.orders) || [];
+      document.getElementById('odPending').textContent = (data.data && data.data.count) || orders.length;
+      renderOrders(orders);
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '미발주 주문 불러오기';
+      list.innerHTML = '<div class="order-empty">불러오기 실패: ' + esc(e.message) + '</div>';
+    }
+  });
+}
+
+// 신규 주문 자동 발주확인 (ids 미지정 → 서버 자동 모드)
+document.getElementById('btnOrderAutoConfirm').addEventListener('click', () => {
+  var btn = document.getElementById('btnOrderAutoConfirm');
+  btn.disabled = true;
+  btn.textContent = '발주확인 중…';
+  withOrderApi(async (base, licenseKey) => {
+    if (!licenseKey) {
+      btn.disabled = false; btn.textContent = '신규 주문 자동 발주확인';
+      addSimpleLog('error', '라이선스 필요', '설정에서 라이선스 키를 먼저 등록해주세요.');
+      return;
+    }
+    try {
+      var res = await fetch(base + '/api/order/auto-confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseKey: licenseKey }),
+      });
+      var data = await res.json();
+      btn.disabled = false; btn.textContent = '신규 주문 자동 발주확인';
+      if (!res.ok || !data.success) {
+        addSimpleLog('error', '발주확인 실패', orderErrMsg(data, res.status));
+        return;
+      }
+      var d = data.data || {};
+      if (d.skipped) {
+        addSimpleLog('skip', '자동확인 OFF', (d.reason || '') + ' · 미발주 ' + (d.pendingCount || 0) + '건');
+        return;
+      }
+      var n = d.confirmed || 0;
+      if (n > 0) bumpOrderStat('odConfirm', n);
+      addSimpleLog('change', '발주확인 완료', '확인 ' + n + '건' + (d.failed ? ' · 실패 ' + d.failed + '건' : ''));
+      loadPendingOrders();  // 목록 갱신
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '신규 주문 자동 발주확인';
+      addSimpleLog('error', '발주확인 오류', e.message);
+    }
+  });
+});
+
+// 주문 카드 리스트 렌더
+function renderOrders(orders) {
+  var list = document.getElementById('orderList');
+  list.innerHTML = '';
+  if (!orders.length) {
+    list.innerHTML = '<div class="order-empty">미발주 주문이 없습니다.</div>';
+    return;
+  }
+  orders.forEach(o => list.appendChild(buildOrderCard(o)));
+}
+
+function buildOrderCard(o) {
+  var card = document.createElement('div');
+  card.className = 'od-card';
+
+  var opts = DELIVERY_COMPANIES.map(c => '<option value="' + c[0] + '">' + esc(c[1]) + '</option>').join('');
+
+  var meta = [];
+  if (o.buyerName) meta.push(esc(o.buyerName));
+  if (o.quantity != null) meta.push(o.quantity + '개');
+  if (o.totalAmount != null) meta.push(Number(o.totalAmount).toLocaleString('ko-KR') + '원');
+  if (o.orderedAt) meta.push(esc(String(o.orderedAt).slice(0, 10)));
+
+  card.innerHTML =
+    '<div class="od-top">' +
+      '<span class="od-badge">' + esc(o.productOrderStatus || '발주대기') + '</span>' +
+      '<span class="od-id">#' + esc(o.productOrderId || '') + '</span>' +
+    '</div>' +
+    '<div class="od-name">' + esc(o.productName || '(상품명 없음)') + '</div>' +
+    '<div class="od-meta">' + meta.join(' · ') + '</div>' +
+    '<div class="od-dispatch">' +
+      '<select class="od-company">' + opts + '</select>' +
+      '<input class="od-tracking" type="text" placeholder="송장번호" inputmode="numeric">' +
+      '<button class="od-btn act-dispatch">송장 등록</button>' +
+    '</div>';
+
+  var btn = card.querySelector('.act-dispatch');
+  var sel = card.querySelector('.od-company');
+  var trk = card.querySelector('.od-tracking');
+
+  // 송장 등록
+  btn.addEventListener('click', () => {
+    var trackingNumber = trk.value.trim().replace(/[\s-]/g, '');
+    if (!trackingNumber) { alert('송장번호를 입력하세요.'); return; }
+    btn.disabled = true;
+    btn.textContent = '등록 중…';
+    withOrderApi(async (base, licenseKey) => {
+      if (!licenseKey) {
+        btn.disabled = false; btn.textContent = '송장 등록';
+        addSimpleLog('error', '라이선스 필요', '설정에서 라이선스 키를 먼저 등록해주세요.');
+        return;
+      }
+      try {
+        var res = await fetch(base + '/api/order/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            licenseKey: licenseKey,
+            productOrderId: o.productOrderId,
+            deliveryCompanyCode: sel.value,
+            trackingNumber: trackingNumber,
+          }),
+        });
+        var data = await res.json();
+        if (!res.ok || !data.success) {
+          btn.disabled = false; btn.textContent = '송장 등록';
+          addSimpleLog('error', '송장 등록 실패', orderErrMsg(data, res.status));
+          return;
+        }
+        card.classList.add('done');
+        sel.disabled = true; trk.disabled = true;
+        btn.textContent = '등록 완료';
+        bumpOrderStat('odDispatch', 1);
+        addSimpleLog('change', '송장 등록', o.productName || String(o.productOrderId || ''));
+      } catch (e) {
+        btn.disabled = false; btn.textContent = '송장 등록';
+        addSimpleLog('error', '송장 등록 오류', e.message);
+      }
+    });
+  });
+
+  return card;
+}
