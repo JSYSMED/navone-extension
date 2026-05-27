@@ -17,6 +17,67 @@ chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ tabId: tab.id });
 });
 
+// =============================================
+// 자동화 알람 (클레임 30분 / 발주 15분)
+// 토글 상태는 storage top-level 키(autoClaimProcess / autoConfirmOrders)에 저장되고,
+// background가 storage 변화를 감지해 chrome.alarms를 생성/해제한다.
+// (autoMode = 가격 자동화 토글은 저장만 하고 알람은 걸지 않는다 — 수동 START로 동작)
+// =============================================
+const CLAIM_ALARM = "autoClaimProcess";
+const ORDER_ALARM = "autoConfirmOrders";
+
+async function syncAutomationAlarms() {
+  const flags = await chrome.storage.local.get([CLAIM_ALARM, ORDER_ALARM]);
+  if (flags.autoClaimProcess) chrome.alarms.create(CLAIM_ALARM, { delayInMinutes: 1, periodInMinutes: 30 });
+  else chrome.alarms.clear(CLAIM_ALARM);
+  if (flags.autoConfirmOrders) chrome.alarms.create(ORDER_ALARM, { delayInMinutes: 1, periodInMinutes: 15 });
+  else chrome.alarms.clear(ORDER_ALARM);
+}
+
+// Vercel 서버에 자동화 작업 요청 (POST). 서버 에러가 확장을 멈추지 않게 try/catch로 삼킴.
+async function runAutomationTask(path, title) {
+  try {
+    const cfg = (await storageGet("config")) || {};
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+    log("\n⚙️ " + title + " 요청");
+    const res = await fetch(vercelUrl + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey: cfg.licenseKey || "" }),
+    });
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch (_) {}
+      log("❌ " + title + " 실패 (" + res.status + ")" + (detail ? " " + detail : ""));
+      slog("error", title + " 실패", "서버 오류 " + res.status + (detail ? " · " + detail : ""));
+      return;
+    }
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+    const processed = (data.processed != null) ? data.processed : (data.count != null ? data.count : null);
+    log("✅ " + title + " 완료" + (processed != null ? " (" + processed + "건)" : ""));
+    slog("change", title + " 완료", processed != null ? processed + "건 처리되었습니다." : "처리되었습니다.");
+  } catch (e) {
+    log("❌ " + title + " 오류: " + e.message);
+    slog("error", title + " 오류", e.message);
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === CLAIM_ALARM) runAutomationTask("/api/claim/auto-process", "클레임 자동처리");
+  else if (alarm.name === ORDER_ALARM) runAutomationTask("/api/order/auto-confirm", "발주 자동확인");
+});
+
+// 토글 변경 즉시 알람 재설정 (logs/slogs 등 잦은 쓰기는 무시)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.autoClaimProcess || changes.autoConfirmOrders) syncAutomationAlarms();
+});
+
+// 서비스워커 설치/기동 시 알람 동기화 (알람은 SW 재시작 사이에 유지됨)
+chrome.runtime.onInstalled.addListener(syncAutomationAlarms);
+chrome.runtime.onStartup.addListener(syncAutomationAlarms);
+
 // 설정 로드
 async function loadConfig() {
   return new Promise(r => {

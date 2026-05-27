@@ -202,6 +202,17 @@ body{
 .btn-test-tg:hover{background:var(--bg2)}
 .save-ok{text-align:center;font-size:12px;color:var(--nv);margin-top:8px;display:none}
 
+/* === AUTOMATION PAGE === */
+.auto-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 0;border-bottom:1px solid var(--bd2);
+}
+.auto-row:last-child{border-bottom:none}
+.auto-info{flex:1}
+.auto-info .auto-title{font-size:14px;font-weight:700;color:var(--tx)}
+.auto-info .auto-desc{font-size:11px;color:var(--tx3);margin-top:3px;line-height:1.4}
+.auto-info .auto-cycle{font-size:10px;color:var(--tx4);margin-top:3px}
+
 /* === REVIEW PAGE === */
 .review-controls{padding:16px 20px;border-bottom:1px solid var(--bd2)}
 .tone-label{font-size:11px;font-weight:700;color:var(--tx3);letter-spacing:.5px;margin-bottom:8px}
@@ -367,6 +378,9 @@ body{
   <div class="nav-item" data-page="order" title="주문/발주">
     <span class="nav-dot"></span>
     <svg viewBox="0 0 24 24"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+  <div class="nav-item" data-page="auto" title="자동화 설정">
+    <span class="nav-dot"></span>
+    <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
   </div>
   <div class="nav-item" data-page="settings" title="설정">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -484,6 +498,38 @@ body{
       </div>
       <button class="btn-save" id="btnSave">저장</button>
       <div class="save-ok" id="saveOk">저장되었습니다.</div>
+    </div>
+  </div>
+
+  <!-- AUTOMATION PAGE -->
+  <div class="page" id="page-auto">
+    <div class="settings">
+      <div class="set-section">
+        <h3>자동화 설정</h3>
+        <div class="auto-row">
+          <div class="auto-info">
+            <div class="auto-title">가격 자동화</div>
+            <div class="auto-desc">경쟁사 최저가를 자동으로 매칭합니다.</div>
+          </div>
+          <button class="toggle" id="autoModeToggle"></button>
+        </div>
+        <div class="auto-row">
+          <div class="auto-info">
+            <div class="auto-title">클레임 자동처리</div>
+            <div class="auto-desc">취소·반품·교환 클레임을 자동으로 처리합니다.</div>
+            <div class="auto-cycle">30분마다 자동 실행</div>
+          </div>
+          <button class="toggle" id="autoClaimToggle"></button>
+        </div>
+        <div class="auto-row">
+          <div class="auto-info">
+            <div class="auto-title">발주 자동확인</div>
+            <div class="auto-desc">신규 주문의 발주를 자동으로 확인합니다.</div>
+            <div class="auto-cycle">15분마다 자동 실행</div>
+          </div>
+          <button class="toggle" id="autoConfirmToggle"></button>
+        </div>
+      </div>
     </div>
   </div>
 
