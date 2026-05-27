@@ -778,3 +778,4 @@ function buildOrderCard(o) {
 
   return card;
 }
+}
