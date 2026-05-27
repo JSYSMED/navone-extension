@@ -156,23 +156,28 @@ chrome.storage.local.get('config', (data) => {
   document.getElementById('cfgSecret').value = c.clientSecret || '';
   document.getElementById('cfgStore').value = (c.storeNames || []).join(', ');
   document.getElementById('cfgUnder').value = c.undercut || 10;
+  document.getElementById('cfgLicense').value = c.licenseKey || '';
   document.getElementById('cfgTgToken').value = c.tgToken || '';
   document.getElementById('cfgTgChat').value = c.tgChatId || '';
 });
 
 document.getElementById('btnSave').addEventListener('click', () => {
-  var cfg = {
-    clientId: document.getElementById('cfgId').value.trim(),
-    clientSecret: document.getElementById('cfgSecret').value.trim(),
-    storeNames: document.getElementById('cfgStore').value.split(',').map(s => s.trim()).filter(Boolean),
-    undercut: parseInt(document.getElementById('cfgUnder').value) || 10,
-    tgToken: document.getElementById('cfgTgToken').value.trim(),
-    tgChatId: document.getElementById('cfgTgChat').value.trim(),
-  };
-  chrome.storage.local.set({ config: cfg }, () => {
-    var ok = document.getElementById('saveOk');
-    ok.style.display = 'block';
-    setTimeout(() => ok.style.display = 'none', 2000);
+  // 기존 config 위에 병합 — reviewTone/vercelUrl 등 폼에 없는 키 보존
+  chrome.storage.local.get('config', (data) => {
+    var cfg = Object.assign({}, data.config || {}, {
+      clientId: document.getElementById('cfgId').value.trim(),
+      clientSecret: document.getElementById('cfgSecret').value.trim(),
+      storeNames: document.getElementById('cfgStore').value.split(',').map(s => s.trim()).filter(Boolean),
+      undercut: parseInt(document.getElementById('cfgUnder').value) || 10,
+      licenseKey: document.getElementById('cfgLicense').value.trim(),
+      tgToken: document.getElementById('cfgTgToken').value.trim(),
+      tgChatId: document.getElementById('cfgTgChat').value.trim(),
+    });
+    chrome.storage.local.set({ config: cfg }, () => {
+      var ok = document.getElementById('saveOk');
+      ok.style.display = 'block';
+      setTimeout(() => ok.style.display = 'none', 2000);
+    });
   });
 });
 
@@ -442,6 +447,124 @@ function buildReviewCard(r) {
       }
     );
   });
+
+  return card;
+}
+
+// =====================================================
+// === 클레임 자동처리 탭 ===
+// =====================================================
+var CLAIM_TYPE_KO = { RETURN: '반품', CANCEL: '취소', EXCHANGE: '교환' };
+var CLAIM_CAT_KO = { simple_return: '단순변심', defect: '상품하자', delivery: '배송문제', other: '기타' };
+
+function bumpClaimStat(id) {
+  var el = document.getElementById(id);
+  el.textContent = (parseInt(el.textContent, 10) || 0) + 1;
+}
+
+// 클레임 조회(새로고침)
+document.getElementById('btnClaimRefresh').addEventListener('click', loadClaims);
+
+function loadClaims() {
+  var btn = document.getElementById('btnClaimRefresh');
+  btn.disabled = true;
+  document.getElementById('claimList').innerHTML = '<div class="rv-loading">클레임을 불러오는 중…</div>';
+  chrome.runtime.sendMessage({ action: 'CLAIM_PENDING' }, (res) => {
+    btn.disabled = false;
+    if (chrome.runtime.lastError || !res || !res.success) {
+      document.getElementById('claimList').innerHTML =
+        '<div class="review-empty">' + esc((res && res.error) || '클레임을 가져오지 못했습니다.') + '</div>';
+      return;
+    }
+    renderClaims(res.claims || []);
+  });
+}
+
+// 전체 자동처리
+document.getElementById('btnClaimAuto').addEventListener('click', () => {
+  var btn = document.getElementById('btnClaimAuto');
+  btn.disabled = true;
+  btn.textContent = '자동처리 중…';
+  chrome.runtime.sendMessage({ action: 'CLAIM_AUTO_PROCESS' }, (res) => {
+    btn.disabled = false;
+    btn.textContent = '전체 자동처리';
+    if (chrome.runtime.lastError || !res || !res.success) {
+      bumpClaimStat('clmError');
+      addSimpleLog('error', '자동처리 실패', (res && res.error) || '');
+      return;
+    }
+    var r = res.result || {};
+    addSimpleLog('change', '클레임 자동처리', '처리 ' + (r.processed || 0) + '건 (승인 ' + (r.approved || 0) + ', 보류 ' + (r.held || 0) + ')');
+    loadClaims();  // 처리 후 목록 갱신
+  });
+});
+
+function renderClaims(claims) {
+  var list = document.getElementById('claimList');
+  var pending = claims.filter(c => !c.processed);
+  document.getElementById('clmPending').textContent = pending.length;
+  list.innerHTML = '';
+  if (!claims.length) {
+    list.innerHTML = '<div class="review-empty">미처리 클레임이 없습니다.</div>';
+    return;
+  }
+  claims.forEach(c => list.appendChild(buildClaimCard(c)));
+}
+
+function buildClaimCard(c) {
+  var card = document.createElement('div');
+  card.className = 'clm-card' + (c.processed ? ' done' : '');
+
+  var type = CLAIM_TYPE_KO[c.claimType] || c.claimType || '-';
+  var cat = CLAIM_CAT_KO[c.category] || '미분류';
+  var amount = Number(c.amount || 0).toLocaleString() + '원';
+
+  var badges = '<span class="clm-badge type">' + esc(type) + '</span>' +
+               '<span class="clm-badge">' + esc(cat) + '</span>';
+  if (c.processed) badges += '<span class="clm-badge done">' + esc(c.decision || '처리됨') + '</span>';
+
+  var canDecide = !c.processed && (c.claimType === 'RETURN' || c.claimType === 'CANCEL');
+  var actions = canDecide
+    ? '<div class="clm-actions">' +
+        '<button class="clm-btn approve">승인</button>' +
+        '<button class="clm-btn reject">거부</button>' +
+      '</div>'
+    : '';
+
+  card.innerHTML =
+    '<div class="clm-top"><div class="clm-name">' + esc(c.productName || '') + '</div>' +
+    '<div class="clm-amount">' + amount + '</div></div>' +
+    '<div class="clm-badges">' + badges + '</div>' +
+    '<div class="clm-reason">' + esc(c.claimReason || '(사유 없음)') + '</div>' +
+    actions;
+
+  if (canDecide) {
+    var approveBtn = card.querySelector('.approve');
+    var rejectBtn = card.querySelector('.reject');
+    function decide(decision, btn) {
+      approveBtn.disabled = true; rejectBtn.disabled = true;
+      btn.textContent = '처리 중…';
+      chrome.runtime.sendMessage(
+        { action: 'CLAIM_MANUAL_DECIDE', productOrderId: c.productOrderId, decision },
+        (res) => {
+          if (chrome.runtime.lastError || !res || !res.success) {
+            approveBtn.disabled = false; rejectBtn.disabled = false;
+            btn.textContent = decision === 'approve' ? '승인' : '거부';
+            bumpClaimStat('clmError');
+            addSimpleLog('error', '클레임 처리 실패', (res && res.error) || c.productName || '');
+            return;
+          }
+          card.classList.add('done');
+          bumpClaimStat('clmDone');
+          var pn = document.getElementById('clmPending');
+          pn.textContent = Math.max(0, (parseInt(pn.textContent, 10) || 1) - 1);
+          addSimpleLog('change', decision === 'approve' ? '클레임 승인' : '클레임 거부', c.productName || '');
+        }
+      );
+    }
+    approveBtn.addEventListener('click', () => decide('approve', approveBtn));
+    rejectBtn.addEventListener('click', () => decide('reject', rejectBtn));
+  }
 
   return card;
 }

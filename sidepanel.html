@@ -269,6 +269,31 @@ body{
 .rv-reply .cnt{font-size:10px;color:var(--tx4);text-align:right;margin:4px 0 8px}
 .rv-loading{font-size:12px;color:var(--tx3);text-align:center;padding:10px}
 
+/* === CLAIM PAGE === */
+.clm-card{
+  border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:10px;
+  background:var(--bg);transition:.15s;
+}
+.clm-card.done{opacity:.5}
+.clm-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px}
+.clm-name{font-size:12px;font-weight:600;color:var(--tx);line-height:1.4;flex:1}
+.clm-amount{font-size:12px;font-weight:700;color:var(--tx2);white-space:nowrap}
+.clm-badges{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap}
+.clm-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;background:var(--bg3);color:var(--tx2)}
+.clm-badge.type{background:var(--nv-l);color:var(--nv)}
+.clm-badge.done{background:var(--nv-l);color:var(--nv)}
+.clm-reason{font-size:12px;color:var(--tx2);line-height:1.5;margin-bottom:10px;white-space:pre-wrap}
+.clm-actions{display:flex;gap:8px}
+.clm-btn{
+  flex:1;padding:9px;border-radius:8px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:.15s;border:1px solid var(--bd);
+}
+.clm-btn.approve{background:var(--nv);color:#fff;border-color:var(--nv)}
+.clm-btn.approve:hover{background:#02a94c}
+.clm-btn.reject{background:var(--bg);color:var(--red);border-color:var(--bd)}
+.clm-btn.reject:hover{border-color:var(--red)}
+.clm-btn:disabled{opacity:.5;cursor:not-allowed}
+
 /* === LOG PAGE (full) === */
 .log-full{padding:12px 20px;overflow-y:auto;flex:1}
 
@@ -293,6 +318,10 @@ body{
   <div class="nav-item" data-page="review" title="리뷰 답변">
     <span class="nav-dot"></span>
     <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+  </div>
+  <div class="nav-item" data-page="claim" title="클레임">
+    <span class="nav-dot"></span>
+    <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
   </div>
   <div class="nav-item" data-page="settings" title="설정">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -389,6 +418,14 @@ body{
         <div class="save-ok" id="csvOk">업로드되었습니다.</div>
       </div>
       <div class="set-section">
+        <h3>NavOne 라이선스</h3>
+        <div class="set-group">
+          <label>라이선스 키</label>
+          <input type="text" id="cfgLicense" placeholder="리뷰 답변 · 클레임 자동처리에 필요">
+          <div class="hint">서버가 이 키로 스토어·커머스 자격증명을 조회합니다.</div>
+        </div>
+      </div>
+      <div class="set-section">
         <h3>텔레그램 알림</h3>
         <div class="set-group">
           <label>봇 토큰</label>
@@ -423,6 +460,25 @@ body{
     </div>
     <div class="review-list" id="reviewList">
       <div class="review-empty" id="reviewEmpty">리뷰관리 페이지를 연 뒤<br>‘리뷰 스캔’을 눌러주세요.</div>
+    </div>
+  </div>
+
+  <!-- CLAIM PAGE -->
+  <div class="page" id="page-claim">
+    <div class="review-controls">
+      <div class="tone-label">반품 · 취소 · 교환 자동처리</div>
+      <div class="btn-row">
+        <button class="btn-scan" id="btnClaimAuto">전체 자동처리</button>
+        <button class="btn-stop" id="btnClaimRefresh">새로고침</button>
+      </div>
+    </div>
+    <div class="review-stats">
+      <div class="stat s-green"><div class="val" id="clmDone">0</div><div class="lbl">처리</div></div>
+      <div class="stat s-blue"><div class="val" id="clmPending">0</div><div class="lbl">미처리</div></div>
+      <div class="stat s-red"><div class="val" id="clmError">0</div><div class="lbl">오류</div></div>
+    </div>
+    <div class="review-list" id="claimList">
+      <div class="review-empty" id="claimEmpty">'새로고침'을 눌러<br>미처리 클레임을 불러오세요.</div>
     </div>
   </div>
 

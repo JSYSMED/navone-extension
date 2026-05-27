@@ -195,6 +195,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     submitReply(msg.tabId, msg.rowIndex, msg.replyText, msg.review).then(sendResponse);
     return true;  // 비동기 응답
   }
+  else if (msg.action === "CLAIM_PENDING") {
+    getClaimPending().then(sendResponse);
+    return true;  // 비동기 응답
+  }
+  else if (msg.action === "CLAIM_AUTO_PROCESS") {
+    autoProcessClaims().then(sendResponse);
+    return true;  // 비동기 응답
+  }
+  else if (msg.action === "CLAIM_MANUAL_DECIDE") {
+    manualDecideClaim(msg.productOrderId, msg.decision).then(sendResponse);
+    return true;  // 비동기 응답
+  }
   return true;
 });
 
@@ -357,6 +369,103 @@ function failReply(res, fallbackMsg) {
   const err = (res && res.error) || fallbackMsg;
   log("❌ " + err);
   return { success: false, error: err };
+}
+
+// =============================================
+// 클레임 핸들러 — navone-server /api/claim/*
+// licenseKey는 config에서 읽음(리뷰 핸들러와 동일 패턴). 서버가 키로 커머스 자격증명 조회.
+// =============================================
+// CLAIM_PENDING: GET /api/claim/pending → 미처리 클레임 목록
+async function getClaimPending() {
+  try {
+    const cfg = (await storageGet("config")) || {};
+    if (!cfg.licenseKey) return { success: false, error: "라이선스 키를 먼저 설정해주세요." };
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+
+    const res = await fetch(vercelUrl + "/api/claim/pending?licenseKey=" + encodeURIComponent(cfg.licenseKey));
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch (_) {}
+      log("❌ 클레임 조회 실패 (" + res.status + ") " + detail);
+      return { success: false, error: "서버 오류 " + res.status + (detail ? " · " + detail : "") };
+    }
+
+    const data = await res.json();
+    const d = data.data || data;
+    const claims = d.claims || d.pending || [];
+    log("📦 클레임 " + claims.length + "건 수집");
+    slog("collect", "클레임 조회 완료", claims.length + "건의 클레임을 불러왔습니다.");
+    return { success: true, claims, storeName: d.storeName || "" };
+  } catch (e) {
+    log("❌ 클레임 조회 오류: " + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+// CLAIM_AUTO_PROCESS: POST /api/claim/auto-process → AI 자동분류+처리
+async function autoProcessClaims() {
+  try {
+    const cfg = (await storageGet("config")) || {};
+    if (!cfg.licenseKey) return { success: false, error: "라이선스 키를 먼저 설정해주세요." };
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+
+    log("\n🤖 클레임 자동처리 시작");
+    const res = await fetch(vercelUrl + "/api/claim/auto-process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey: cfg.licenseKey }),
+    });
+
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch (_) {}
+      log("❌ 자동처리 실패 (" + res.status + ") " + detail);
+      return { success: false, error: "서버 오류 " + res.status + (detail ? " · " + detail : "") };
+    }
+
+    const data = await res.json();
+    const d = data.data || data;
+    log("🤖 자동처리 완료 — 처리 " + (d.processed || 0) + " / 승인 " + (d.approved || 0) + " / 보류 " + (d.held || 0));
+    slog("change", "클레임 자동처리", "처리 " + (d.processed || 0) + "건 (승인 " + (d.approved || 0) + ", 보류 " + (d.held || 0) + ")");
+    return { success: true, result: d };
+  } catch (e) {
+    log("❌ 클레임 자동처리 오류: " + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+// CLAIM_MANUAL_DECIDE: POST /api/claim/manual-decide → 수동 승인/거부
+async function manualDecideClaim(productOrderId, decision) {
+  try {
+    if (!productOrderId || (decision !== "approve" && decision !== "reject"))
+      return { success: false, error: "잘못된 요청" };
+
+    const cfg = (await storageGet("config")) || {};
+    if (!cfg.licenseKey) return { success: false, error: "라이선스 키를 먼저 설정해주세요." };
+    const vercelUrl = (cfg.vercelUrl || "https://navone-server.vercel.app").replace(/\/+$/, "");
+
+    const res = await fetch(vercelUrl + "/api/claim/manual-decide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey: cfg.licenseKey, productOrderId, decision }),
+    });
+
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch (_) {}
+      log("❌ 클레임 " + decision + " 실패 (" + res.status + ") " + detail);
+      return { success: false, error: "서버 오류 " + res.status + (detail ? " · " + detail : "") };
+    }
+
+    const data = await res.json();
+    const label = decision === "approve" ? "승인" : "거부";
+    log("✅ 클레임 " + label + " 완료 (" + productOrderId + ")");
+    slog("change", "클레임 " + label, productOrderId + " 처리되었습니다.");
+    return { success: true, result: data.data || data };
+  } catch (e) {
+    log("❌ 클레임 수동처리 오류: " + e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // 상세 팝업 열기 폴백 (MAIN world) — 콘텐트 스크립트는 isolated world라 vm scope에 직접 못 닿음.
